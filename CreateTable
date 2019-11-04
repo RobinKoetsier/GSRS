@@ -1,0 +1,143 @@
+RateTable <- function(MatchDay,Twitter){
+# GOAL RATING ACCOUNT!!!!!!
+  requestURL = "https://api.twitter.com/oauth/request_token"
+  accessURL = "https://api.twitter.com/oauth/access_token"
+  authURL = "https://api.twitter.com/oauth/authorize"
+  consumerKey = ".."
+  consumerSecret = ".."
+  accessToken = ".."
+  accessSecret = ".."
+  
+page <- "https://www.oddschecker.com/football/netherlands/eredivisie"
+scraped_page <- read_html(page)
+
+
+OddsUni <- scraped_page %>% html_nodes(".all-odds-click+ .basket-add .add-to-bet-basket") %>% html_text()
+Clubs <- scraped_page %>% html_nodes(".fixtures-bet-name") %>% html_text()
+OddsUni<-round((as.integer(word(OddsUni,1,sep = "/")) + as.integer(word(OddsUni,2,sep = "/")))  / as.integer(word(OddsUni,2,sep = "/")),2)
+
+
+Clubs = list(Clubs)
+
+
+Clubs2=Clubs[1:length(Clubs)-5] 
+Clubs2 <- unlist(Clubs2)
+
+Clubs2 <- substring(Clubs2, 1,3)
+Games <- as.data.frame(matrix(ncol=2, nrow=9))
+
+i=1
+j=1
+
+while (i < 10) {
+  
+  Games[i,1] = Clubs2[j]
+  i <- i+1
+  j = j+2
+  
+}
+
+i=1
+j=2
+while (i < 10) {
+  Games[i,2] = Clubs2[j]
+  i <- i+1
+  j = j+2
+}
+
+
+
+Games[Games=="Twe"]<-"Twente"
+Games[Games=="Emm"]<-"FC Emmen"
+Games[Games=="AZ "]<-"AZ Alkmaar"
+Games[Games=="Den"]<-"Den Haag"
+Games[Games=="Aja"]<-"Ajax"
+Games[Games=="SBV"]<-"Excelsior"
+Games[Games=="Fey"]<-"Feyenoord"
+Games[Games=="Spa"]<-"Sparta Rotterdam"
+Games[Games=="Her"]<-"Heracles"
+Games[Games=="For"]<-"For Sittard"
+Games[Games=="Ven"]<-"VVV Venlo"
+Games[Games=="PSV"]<-"PSV Eindhoven"
+Games[Games=="Waa"]<-"Waalwijk"
+Games[Games=="Hee"]<-"Heerenveen"
+Games[Games=="Gro"]<-"Groningen"
+Games[Games=="Wil"]<-"Willem II"
+Games[Games=="Zwo"]<-"Zwolle"
+Games[Games=="Utr"]<-"Utrecht"
+Games[Games=="Vit"]<-"Vitesse"
+
+
+#for (i in 1:nrow(test1920)) {
+#  if(test1920$Round[i] == 1| test1920$Round[i]==2 | test1920$Round[i] == 3 | test1920$Round[i] == 4) {
+#    test1920$GoalScore5[i] = NA
+#  }
+#}
+test1920 <- ere1920_total %>%
+  mutate(GoalScore5 = rollsumr(ere1920_total$GDPerGame, k = 5, fill = NA))
+
+test1920 <- test1920 %>% group_by(Team) %>% top_n(1, Round)
+Rating1 <- test1920 %>% distinct(Team, .keep_all = TRUE ) %>% select(2,13)
+
+# Tijdelijk weg, tot alles weer gelijk loopt
+#Rating1 = test1920 %>% filter(Round == MatchDay) %>% select(2,11)
+
+
+#Rating12 = test1920 %>% filter(Round == MatchDay -1) %>%
+#  filter(Team %in% c("Ajax", "AZ Alkmaar", "Feyenoord","For Sittard", "Groningen", "PSV Eindhoven")) %>%
+#  select(2,11)
+
+#Rating1 = rbind(Rating11, Rating12)
+
+names(Games)[1] <-"HTeam"
+names(Games)[2] <-"ATeam"
+
+rate3 <- Games %>% left_join(Rating1, by = c("HTeam" = "Team")) %>% 
+  mutate(GSHome = GoalScore5)  
+
+Rate<-  rate3 %>% left_join(Rating1, by = c("ATeam" = "Team")) %>%
+  mutate(GSAway = GoalScore5.y) %>% select(1,2,4,6) %>% 
+  mutate(Rating1 = GSHome - GSAway) %>%
+  mutate(HomeChance = (0.0163*Rating1 + 0.5122)*100) %>%
+  mutate(Odds = round(100/HomeChance,2)) #%>%
+  #mutate(HomeChance = paste(HomeChance," %"))
+
+Rate <- Rate %>% mutate(Oddschecker = OddsUni[1:9])
+TestRating <- Rate %>% left_join(ja, by = c("Rating1" = "Score"))
+Rate <- Rate %>% mutate("Sample Size" = TestRating$Som)
+Rate <- Rate %>% mutate("Dif" = Oddschecker - Odds)
+
+Rate$`Bet` <- ifelse((Rate$Rating1 > -6 & Rate$Rating1 <6) & Rate$Oddschecker>Rate$Odds,1,0)
+names(Rate)[5] <- "GS Rating"
+
+RateNieuw2 <- formattable(Rate, list
+                         ( `Dif` = FALSE, 
+                           `Bet` = formatter("span",
+                                             style = x ~ style(color = ifelse(x>0 , "green", "red")),
+                                             x ~ icontext(ifelse(x>0  , "ok", "remove"), ifelse(x>0 , "Yes", "No"))),
+                           `Oddschecker` = formatter("span", 
+                                                     style = ~ style(color = ifelse(`Oddschecker` > `Odds`, "green", "red")),
+                                                     ~ icontext(sapply(`Dif`, function(x) if (x < 0) "arrow-down" 
+                                                                       else if (x > 0) "arrow-up" else ""), `Oddschecker`))))
+
+
+
+export_formattable(RateNieuw2, "formattable.png")
+
+View(Rate)
+
+
+
+setup_twitter_oauth(consumerKey,
+                    consumerSecret,
+                    accessToken,
+                    accessSecret)
+if(Twitter == "ja"){
+  print("tweet tweet")
+tweet(paste0("Ratings for match day: ", MatchDay + 1, "\nExplanation:https://twitter.com/GoalsSupRateSys/status/1169150701899001856?s=20 \n#rstats #betting #Eredivisie"), mediaPath = "formattable.png")
+}else {
+  print("nee")
+}
+
+
+}
