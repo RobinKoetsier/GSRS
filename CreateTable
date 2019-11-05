@@ -1,4 +1,10 @@
 RateTable <- function(MatchDay,Twitter){
+  require("rvest")
+  library("zoo")
+  library("tidyverse")
+  library("formattable")
+  library("htmltools")
+  library("webshot")
 # GOAL RATING ACCOUNT!!!!!!
   requestURL = "https://api.twitter.com/oauth/request_token"
   accessURL = "https://api.twitter.com/oauth/access_token"
